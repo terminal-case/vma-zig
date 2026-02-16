@@ -12,11 +12,14 @@
             .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v1.4.335.tar.gz",
             .hash = "N-V-__8AADIiFAJfrWhQBPEi9LPInaZNnXV15Ca887-ty4M1",
         },
+        .vma = .{
+            .url = "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/archive/refs/tags/v3.3.0.tar.gz",
+            .hash = "N-V-__8AAIutPgABk6NlXZhlJ5P8qVECvakZIKoO94h7xUOw",
+        },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
-        "vma",
     },
 }

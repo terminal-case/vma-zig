@@ -9,7 +9,8 @@ pub fn build(b: *std.Build) void {
         .registry = vulkan_headers_dep.path("registry/vk.xml"),
     });
     const vulkan_mod = vulkan_dep.module("vulkan-zig");
-    const vma_include = b.path("vma/include");
+    const vma_dep = b.dependency("vma", .{});
+    const vma_include = vma_dep.path("include");
     const vk_include = vulkan_headers_dep.path("include");
 
     const vma_lib = b.addLibrary(.{
