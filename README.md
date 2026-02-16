@@ -2,14 +2,19 @@
 
 Zig bindings for [Vulkan Memory Allocator (VMA)](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator), designed to work with [vulkan-zig](https://github.com/Snektron/vulkan-zig). MIT licensed.
 
-VMA is vendored at tag **v3.3.0** (git submodule in `vma/`). Compatible with Vulkan 1.0–1.4 and Vulkan-Headers v1.4.335.
+VMA is vendored at tag **v3.3.0** through the Zig build system. Compatible with Vulkan 1.0–1.4 and Vulkan-Headers v1.4.335.
 
 ## Features
 
-- **Allocator**: Create/destroy with `Instance` + `Device` + `PhysicalDevice`; vma-zig fills `VmaVulkanFunctions` from your `vkGetInstanceProcAddr` loader.
+- **Allocator**: Create/destroy with `Instance` + `Device` + `PhysicalDevice`; vma-zig fills `VmaVulkanFunctions` from your `vkGetInstanceProcAddr` loader. Use `AllocatorCreateFlags.ext_memory_budget` when the device supports `VK_EXT_memory_budget` for accurate heap budgets.
 - **Buffers**: `createBuffer` / `destroyBuffer` (create + allocate + bind in one call).
 - **Images**: `createImage` / `destroyImage`.
 - **Memory**: `freeMemory`, `mapMemory`, `unmapMemory`, `getAllocationInfo`.
+- **Heap budget**: `getHeapBudgets(allocator, heap_count)` returns `[]HeapBudget` (usage, budget, block/allocation bytes per heap). Pass `heap_count` from `vkGetPhysicalDeviceMemoryProperties(physical_device).memory_heap_count`.
+- **Statistics string**: `buildStatsString(allocator, detailed_map)` and `freeStatsString(allocator, str)` for debug dumps.
+- **Allocation options**: `AllocationCreateInfo.priority`, `required_flags`, `preferred_flags`, and `pool` (optional pool for pool-based allocation).
+- **Custom pools**: `createPool`, `destroyPool`, and allocating buffers/images from a pool via `AllocationCreateInfo.pool`.
+- **Defragmentation**: `beginDefragmentation`, `endDefragmentation`, `beginDefragmentationPass`, `endDefragmentationPass`, and `DefragmentationContext` / `DefragmentationInfo` / `DefragmentationPassMoveInfo`.
 - Results are translated to `vk.Result`; API uses vulkan-zig types (`vk.Buffer`, `vk.Device`, etc.).
 
 ## Usage
@@ -54,11 +59,8 @@ VMA is vendored at tag **v3.3.0** (git submodule in `vma/`). Compatible with Vul
 
 ## API not yet implemented
 
-The following VMA API areas are **not** yet wrapped in vma-zig. Contributions welcome for an eventual open-source release.
+The following VMA API areas are **not** yet wrapped in vma-zig. Contributions welcome.
 
-- **Custom pools**: `vmaCreatePool`, `vmaDestroyPool`, pool-based allocation (`vmaAllocateMemoryFromPool`, etc.)
-- **Defragmentation**: `vmaBeginDefragmentation`, `vmaEndDefragmentation`, `vmaBeginDefragmentationPass`, `vmaEndDefragmentationPass`, and related structures
-- **Statistics and budget**: `vmaGetHeapBudgets`, `vmaCalculateStatistics`, `vmaGetPoolStatistics`, `vmaBuildStatsString`, JSON dump, etc.
 - **Virtual allocator**: `vmaCreateVirtualBlock`, `vmaDestroyVirtualBlock`, and the virtual allocation API
 - **Flush/invalidate**: `vmaFlushAllocation`, `vmaInvalidateAllocation`, `vmaFlushAllocations`, `vmaInvalidateAllocations`
 - **Allocation names/user data**: `vmaSetAllocationName`, `vmaGetAllocationName`, and user-data helpers beyond what is in `VmaAllocationCreateInfo`

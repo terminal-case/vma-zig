@@ -10,6 +10,70 @@ const c = @cImport({
 /// Opaque VMA allocation handle; pass to destroyBuffer/destroyImage/freeMemory/mapMemory.
 pub const Allocation = c.VmaAllocation;
 
+/// Opaque VMA pool handle; pass to createPool/destroyPool and AllocationCreateInfo.pool.
+pub const Pool = c.VmaPool;
+
+pub const PoolCreateInfo = struct {
+    memory_type_index: u32,
+    flags: PoolCreateFlags = .{},
+    block_size: vk.DeviceSize = 0,
+    min_block_count: usize = 0,
+    max_block_count: usize = 0,
+    frame_in_use_count: u32 = 0,
+    priority: f32 = 0.5,
+    min_allocation_alignment: vk.DeviceSize = 0,
+
+    pub const PoolCreateFlags = struct {
+        ignore_buffer_image_granularity: bool = false,
+        linear_algorithm: bool = false,
+
+        fn toC(flags: PoolCreateFlags) c.VmaPoolCreateFlags {
+            var f: c.VmaPoolCreateFlags = 0;
+            if (flags.ignore_buffer_image_granularity) f |= c.VMA_POOL_CREATE_IGNORE_BUFFER_IMAGE_GRANULARITY_BIT;
+            if (flags.linear_algorithm) f |= c.VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT;
+            return f;
+        }
+    };
+};
+
+fn poolCreateFlagsToC(flags: PoolCreateInfo.PoolCreateFlags) c.VmaPoolCreateFlags {
+    return PoolCreateInfo.PoolCreateFlags.toC(flags);
+}
+
+/// Opaque defragmentation context; use with Allocator.beginDefragmentationPass/endDefragmentationPass/endDefragmentation.
+pub const DefragmentationContext = struct {
+    handle: c.VmaDefragmentationContext,
+};
+
+pub const DefragmentationInfo = struct {
+    flags: DefragmentationFlags = .{},
+    pool: ?Pool = null,
+    max_cpu_allocation_count: u32 = 0,
+    max_cpu_bytes_to_move: vk.DeviceSize = 0,
+    max_gpu_allocation_count: u32 = 0,
+    max_gpu_bytes_to_move: vk.DeviceSize = 0,
+
+    pub const DefragmentationFlags = struct {
+        incremental: bool = false,
+
+        fn toC(flags: DefragmentationFlags) c.VmaDefragmentationFlags {
+            var f: c.VmaDefragmentationFlags = 0;
+            if (flags.incremental) f |= c.VMA_DEFRAGMENTATION_FLAG_INCREMENTAL;
+            return f;
+        }
+    };
+};
+
+fn defragmentationFlagsToC(flags: DefragmentationInfo.DefragmentationFlags) c.VmaDefragmentationFlags {
+    return DefragmentationInfo.DefragmentationFlags.toC(flags);
+}
+
+/// Pass move info filled by beginDefragmentationPass; p_moves points to move_count DefragmentationMove entries (C array).
+pub const DefragmentationPassMoveInfo = struct {
+    move_count: u32,
+    p_moves: ?[*]const c.VmaDefragmentationMove,
+};
+
 pub const Allocator = struct {
     handle: c.VmaAllocator,
 
@@ -145,6 +209,110 @@ pub const Allocator = struct {
             .p_mapped_data = if (info.pMappedData != null) @ptrCast(info.pMappedData) else null,
         };
     }
+
+    /// Returns heap budget info for each memory heap. Caller must pass heap_count from
+    /// vkGetPhysicalDeviceMemoryProperties(physical_device).memory_heap_count.
+    /// Caller owns the returned slice; free with allocator.free().
+    pub fn getHeapBudgets(self: Allocator, allocator: std.mem.Allocator, heap_count: u32) ![]HeapBudget {
+        const slice = try allocator.alloc(HeapBudget, heap_count);
+        var c_budgets: [c.VK_MAX_MEMORY_HEAPS]c.VmaBudget = undefined;
+        c.vmaGetHeapBudgets(self.handle, &c_budgets);
+        for (slice, c_budgets[0..heap_count]) |*z, cb| {
+            z.* = .{
+                .block_bytes = cb.statistics.blockBytes,
+                .allocation_bytes = cb.statistics.allocationBytes,
+                .usage = cb.usage,
+                .budget = cb.budget,
+            };
+        }
+        return slice;
+    }
+
+    /// Build a human-readable stats string (e.g. for debug overlay or console).
+    /// Caller owns the returned slice; free with freeStatsString(allocator, slice).
+    /// detailed_map: when true, includes detailed block map in the string.
+    pub fn buildStatsString(self: Allocator, allocator: std.mem.Allocator, detailed_map: bool) ![]const u8 {
+        var c_str: ?[*:0]const u8 = null;
+        c.vmaBuildStatsString(self.handle, @ptrCast(&c_str), @intFromBool(detailed_map));
+        const ptr = c_str orelse return error.VmaBuildStatsStringFailed;
+        const len = std.mem.len(ptr);
+        const copy = try allocator.dupe(u8, ptr[0..len]);
+        c.vmaFreeStatsString(self.handle, @ptrCast(ptr));
+        return copy;
+    }
+
+    /// Free a stats string returned by buildStatsString.
+    pub fn freeStatsString(self: Allocator, allocator: std.mem.Allocator, str: []const u8) void {
+        _ = self;
+        allocator.free(str);
+    }
+
+    /// Create a custom memory pool. Use AllocationCreateInfo.pool to allocate from it.
+    pub fn createPool(self: Allocator, create_info: PoolCreateInfo) !Pool {
+        var ci: c.VmaPoolCreateInfo = .{
+            .memoryTypeIndex = create_info.memory_type_index,
+            .flags = poolCreateFlagsToC(create_info.flags),
+            .blockSize = create_info.block_size,
+            .minBlockCount = create_info.min_block_count,
+            .maxBlockCount = create_info.max_block_count,
+            .frameInUseCount = create_info.frame_in_use_count,
+            .priority = create_info.priority,
+            .minAllocationAlignment = create_info.min_allocation_alignment,
+            .pMemoryAllocateNext = null,
+        };
+        var pool: c.VmaPool = null;
+        const result = c.vmaCreatePool(self.handle, &ci, &pool);
+        if (result != c.VK_SUCCESS) return error.VmaPoolCreateFailed;
+        return pool.?;
+    }
+
+    /// Destroy a custom pool. All allocations from the pool must be freed first.
+    pub fn destroyPool(self: Allocator, pool: Pool) void {
+        c.vmaDestroyPool(self.handle, pool);
+    }
+
+    /// Begin defragmentation. Returns a context to use with beginDefragmentationPass/endDefragmentationPass, then endDefragmentation.
+    pub fn beginDefragmentation(self: Allocator, info: DefragmentationInfo) !DefragmentationContext {
+        var ci: c.VmaDefragmentationInfo = .{
+            .flags = defragmentationFlagsToC(info.flags),
+            .pool = if (info.pool) |p| p else null,
+            .maxCpuAllocationCount = info.max_cpu_allocation_count,
+            .maxCpuBytesToMove = info.max_cpu_bytes_to_move,
+            .maxGpuAllocationCount = info.max_gpu_allocation_count,
+            .maxGpuBytesToMove = info.max_gpu_bytes_to_move,
+        };
+        var ctx: c.VmaDefragmentationContext = null;
+        const result = c.vmaBeginDefragmentation(self.handle, &ci, &ctx);
+        if (result != c.VK_SUCCESS) return error.VmaDefragmentationBeginFailed;
+        return .{ .handle = ctx.? };
+    }
+
+    /// End defragmentation and free the context.
+    pub fn endDefragmentation(self: Allocator, context: DefragmentationContext) void {
+        c.vmaEndDefragmentation(self.handle, context.handle);
+    }
+
+    /// Begin a defragmentation pass. Fills pass_info with moves to perform; execute them (e.g. copy buffer/image), then call endDefragmentationPass.
+    pub fn beginDefragmentationPass(self: Allocator, context: DefragmentationContext, pass_info: *DefragmentationPassMoveInfo) !void {
+        var c_pass: c.VmaDefragmentationPassMoveInfo = .{
+            .moveCount = 0,
+            .pMoves = null,
+        };
+        const result = c.vmaBeginDefragmentationPass(self.handle, context.handle, &c_pass);
+        if (result != c.VK_SUCCESS) return error.VmaDefragmentationPassFailed;
+        pass_info.move_count = c_pass.moveCount;
+        pass_info.p_moves = if (c_pass.pMoves) |p| @ptrCast(p) else null;
+    }
+
+    /// End a defragmentation pass after performing the moves.
+    pub fn endDefragmentationPass(self: Allocator, context: DefragmentationContext, pass_info: *DefragmentationPassMoveInfo) !void {
+        var c_pass: c.VmaDefragmentationPassMoveInfo = .{
+            .moveCount = pass_info.move_count,
+            .pMoves = if (pass_info.p_moves) |p| @ptrCast(p) else null,
+        };
+        const result = c.vmaEndDefragmentationPass(self.handle, context.handle, &c_pass);
+        if (result != c.VK_SUCCESS) return error.VmaDefragmentationPassFailed;
+    }
 };
 
 pub const BufferAllocation = struct {
@@ -167,9 +335,25 @@ pub const AllocationInfo = struct {
     p_mapped_data: ?[*]u8,
 };
 
+/// Per-heap budget info from vmaGetHeapBudgets. Use with Allocator.getHeapBudgets().
+pub const HeapBudget = struct {
+    block_bytes: u64,
+    allocation_bytes: u64,
+    usage: u64,
+    budget: u64,
+};
+
 pub const AllocationCreateInfo = struct {
     usage: MemoryUsage = .auto,
     flags: AllocationCreateFlags = .{},
+    /// For VK_EXT_memory_priority: priority in [0,1]; default 0.5. Ignored if allocator not created with ext_memory_priority.
+    priority: f32 = 0.0,
+    /// Required memory property flags; 0 means no requirement.
+    required_flags: vk.MemoryPropertyFlags = .{},
+    /// Preferred memory property flags; 0 means no preference.
+    preferred_flags: vk.MemoryPropertyFlags = .{},
+    /// Optional pool to allocate from; null = default pool.
+    pool: ?Pool = null,
 
     pub const MemoryUsage = enum(c_int) {
         unknown = c.VMA_MEMORY_USAGE_UNKNOWN,
@@ -245,12 +429,12 @@ fn allocationCreateInfoToC(info: AllocationCreateInfo) c.VmaAllocationCreateInfo
     return .{
         .flags = AllocationCreateInfo.AllocationCreateFlags.toC(info.flags),
         .usage = @intCast(@intFromEnum(info.usage)),
-        .requiredFlags = 0,
-        .preferredFlags = 0,
+        .requiredFlags = @bitCast(info.required_flags),
+        .preferredFlags = @bitCast(info.preferred_flags),
         .memoryTypeBits = 0,
-        .pool = null,
+        .pool = if (info.pool) |p| p else null,
         .pUserData = null,
-        .priority = 0.0,
+        .priority = info.priority,
     };
 }
 
