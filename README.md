@@ -54,7 +54,6 @@ VMA is vendored at tag **v3.3.0** through the Zig build system. Compatible with 
 ## Build
 
 - Build: `zig build`
-- Run tests (compile-only check of the bindings): `zig build test`
 
 ## API not yet implemented
 
