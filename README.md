@@ -19,7 +19,7 @@ VMA is vendored at tag **v3.3.0** through the Zig build system. Compatible with 
 
 ## Usage
 
-1. Add the dependency in `build.zig.zon`. I recommend using `zig fetch --save "git+https://github.com/terminal-case/vma-zig.git" rather than manual add.
+1. Add the dependency in `build.zig.zon`. I recommend using `zig fetch --save git+https://github.com/terminal-case/vma-zig.git` rather than manual add.
 
 2. In `build.zig`:
 
