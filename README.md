@@ -53,7 +53,6 @@ VMA is vendored at tag **v3.3.0** through the Zig build system. Compatible with 
 
 ## Build
 
-- Initialize the VMA submodule: `git submodule update --init --recursive`
 - Build: `zig build`
 - Run tests (compile-only check of the bindings): `zig build test`
 
