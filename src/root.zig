@@ -198,6 +198,11 @@ pub const Allocator = struct {
         c.vmaUnmapMemory(self.handle, allocation);
     }
 
+    /// Flush host writes to non-coherent mapped memory so the device sees them. Call after writing to a mapped allocation.
+    pub fn flushAllocation(self: Allocator, allocation: c.VmaAllocation, offset: vk.DeviceSize, size: vk.DeviceSize) void {
+        _ = c.vmaFlushAllocation(self.handle, allocation, offset, size);
+    }
+
     pub fn getAllocationInfo(self: Allocator, allocation: c.VmaAllocation) AllocationInfo {
         var info: c.VmaAllocationInfo = undefined;
         c.vmaGetAllocationInfo(self.handle, allocation, &info);
