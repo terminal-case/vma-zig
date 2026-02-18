@@ -7,6 +7,7 @@ VMA is vendored at tag **v3.3.0** through the Zig build system. Compatible with 
 ## Features
 
 - **Allocator**: Create/destroy with `Instance` + `Device` + `PhysicalDevice`; vma-zig fills `VmaVulkanFunctions` from your `vkGetInstanceProcAddr` loader. Use `AllocatorCreateFlags.ext_memory_budget` when the device supports `VK_EXT_memory_budget` for accurate heap budgets.
+- **Flush/invalidate**: `vmaFlushAllocation`
 - **Buffers**: `createBuffer` / `destroyBuffer` (create + allocate + bind in one call).
 - **Images**: `createImage` / `destroyImage`.
 - **Memory**: `freeMemory`, `mapMemory`, `unmapMemory`, `getAllocationInfo`.
@@ -60,7 +61,7 @@ VMA is vendored at tag **v3.3.0** through the Zig build system. Compatible with 
 The following VMA API areas are **not** yet wrapped in vma-zig. Contributions welcome.
 
 - **Virtual allocator**: `vmaCreateVirtualBlock`, `vmaDestroyVirtualBlock`, and the virtual allocation API
-- **Flush/invalidate**: `vmaFlushAllocation`, `vmaInvalidateAllocation`, `vmaFlushAllocations`, `vmaInvalidateAllocations`
+- **Flush/invalidate**: `vmaInvalidateAllocation`, `vmaFlushAllocations`, `vmaInvalidateAllocations`
 - **Allocation names/user data**: `vmaSetAllocationName`, `vmaGetAllocationName`, and user-data helpers beyond what is in `VmaAllocationCreateInfo`
 - **Sparse binding/residency**: Sparse buffer/image and residency APIs
 - **Sibling helpers**: `vmaCreateBufferWithAlignment`, `vmaCreateAliasingBuffer`, `vmaCreateAliasingBuffer2`, `vmaCreateAliasingImage`, `vmaCreateAliasingImage2`
