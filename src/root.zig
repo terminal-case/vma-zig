@@ -84,7 +84,12 @@ pub const Allocator = struct {
         device: vk.Device,
         vulkan_api_version: u32 = @bitCast(vk.API_VERSION_1_3),
         preferred_large_heap_block_size: u64 = 0,
-        heap_size_limit: ?u64 = null,
+        /// Optional per-heap allocation caps (VMA `pHeapSizeLimit`). When set,
+        /// the slice MUST have exactly `VkPhysicalDeviceMemoryProperties
+        /// .memoryHeapCount` entries, in heap-index order; use `vk.WHOLE_SIZE`
+        /// for heaps that should stay unlimited. VMA copies the values during
+        /// `vmaCreateAllocator`, so the slice may point at stack memory.
+        heap_size_limits: ?[]const u64 = null,
         get_instance_proc_addr: vk.PfnGetInstanceProcAddr,
     };
 
@@ -104,7 +109,7 @@ pub const Allocator = struct {
         create_info.device = @ptrFromInt(@intFromEnum(info.device));
         create_info.vulkanApiVersion = info.vulkan_api_version;
         create_info.preferredLargeHeapBlockSize = info.preferred_large_heap_block_size;
-        create_info.pHeapSizeLimit = if (info.heap_size_limit) |limit| limit else null;
+        create_info.pHeapSizeLimit = if (info.heap_size_limits) |limits| limits.ptr else null;
         create_info.pAllocationCallbacks = null;
         create_info.pDeviceMemoryCallbacks = null;
         create_info.pVulkanFunctions = &vulkan_functions;
@@ -201,6 +206,11 @@ pub const Allocator = struct {
     /// Flush host writes to non-coherent mapped memory so the device sees them. Call after writing to a mapped allocation.
     pub fn flushAllocation(self: Allocator, allocation: c.VmaAllocation, offset: vk.DeviceSize, size: vk.DeviceSize) void {
         _ = c.vmaFlushAllocation(self.handle, allocation, offset, size);
+    }
+
+    /// Invalidate non-coherent mapped memory so the host sees device writes. Call before reading a mapped allocation the GPU wrote.
+    pub fn invalidateAllocation(self: Allocator, allocation: c.VmaAllocation, offset: vk.DeviceSize, size: vk.DeviceSize) void {
+        _ = c.vmaInvalidateAllocation(self.handle, allocation, offset, size);
     }
 
     pub fn getAllocationInfo(self: Allocator, allocation: c.VmaAllocation) AllocationInfo {
