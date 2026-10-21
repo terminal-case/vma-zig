@@ -192,6 +192,36 @@ pub const Allocator = struct {
         c.vmaFreeMemory(self.handle, allocation);
     }
 
+    pub fn allocateMemory(
+        self: Allocator,
+        requirements: vk.MemoryRequirements,
+        allocation_create_info: AllocationCreateInfo,
+    ) !Allocation {
+        const reqs: c.VkMemoryRequirements = .{
+            .size = requirements.size,
+            .alignment = requirements.alignment,
+            .memoryTypeBits = requirements.memory_type_bits,
+        };
+        var alloc_ci = allocationCreateInfoToC(allocation_create_info);
+        var allocation: c.VmaAllocation = null;
+        const result = c.vmaAllocateMemory(self.handle, &reqs, &alloc_ci, &allocation, null);
+        if (result != c.VK_SUCCESS) return error.VmaAllocateMemoryFailed;
+        return allocation.?;
+    }
+
+    pub fn createAliasingImage(
+        self: Allocator,
+        allocation: Allocation,
+        offset: vk.DeviceSize,
+        image_create_info: vk.ImageCreateInfo,
+    ) !vk.Image {
+        const img_ci = imageCreateInfoToC(image_create_info);
+        var img: c.VkImage = undefined;
+        const result = c.vmaCreateAliasingImage2(self.handle, allocation, offset, &img_ci, &img);
+        if (result != c.VK_SUCCESS) return error.VmaAliasingImageCreateFailed;
+        return @enumFromInt(@intFromPtr(img));
+    }
+
     pub fn mapMemory(self: Allocator, allocation: c.VmaAllocation) ![*]u8 {
         var ptr: ?*anyopaque = null;
         const result = c.vmaMapMemory(self.handle, allocation, &ptr);
